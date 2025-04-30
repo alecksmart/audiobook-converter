@@ -37,11 +37,8 @@ read -rp "Title [default: $BASE]: " TITLE
 TITLE=${TITLE:-$BASE}
 
 OUT_DIR="$SRC_DIR/output"
-if (( DRY_RUN == 0 )); then
-  mkdir -p "$OUT_DIR"
-else
-  echo "[DRY-RUN] Would create output directory: $OUT_DIR"
-fi
+(( DRY_RUN )) || mkdir -p "$OUT_DIR"
+(( DRY_RUN )) && echo "[DRY-RUN] Would create output directory: $OUT_DIR"
 
 # --- Dependencies ---
 for cmd in ffprobe ffmpeg pv MP4Box; do
@@ -51,10 +48,7 @@ done
 # --- Helper: human-readable duration ---
 _hms() {
   local T="${1:-0}"
-  local h=$((T/3600))
-  local m=$(((T%3600)/60))
-  local s=$((T%60))
-  echo "${h} h: ${m} m: ${s} s"
+  printf '%d h: %d m: %d s\n' $((T/3600)) $(((T%3600)/60)) $((T%60))
 }
 
 # --- Gather & Sort Files ---
@@ -63,7 +57,7 @@ readarray -t FILES < <(
     \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \) \
     | sort -V
 )
-(( ${#FILES[@]} )) || { echo "Error: no audio files found in '$SRC_DIR'" >&2; exit 3; }
+(( ${#FILES[@]} )) || { echo "Error: no audio files found" >&2; exit 3; }
 echo "Found ${#FILES[@]} files."
 
 # --- Validation & Duration Collection ---
@@ -76,11 +70,10 @@ for f in "${FILES[@]}"; do
   (( DRY_RUN )) && echo "[DRY-RUN] $f → $(_hms "$dur")"
 done
 
-# --- Estimate Parts & Record Ranges (≤12h each) ---
+# --- Split into ≤12h parts ---
 declare -a PART_DURS START_IDX END_IDX
 total_parts=1 curr_sum=0 start_idx=0
-num_files=${#FILES[@]}
-for ((i=0; i<num_files; i++)); do
+for ((i=0; i<${#FILES[@]}; i++)); do
   d=${DURS[i]}
   if (( curr_sum + d > MAX_DURATION )); then
     PART_DURS+=("$curr_sum")
@@ -90,38 +83,35 @@ for ((i=0; i<num_files; i++)); do
     (( total_parts++ ))
     start_idx=$i
   fi
-  (( curr_sum += d ))
+  (( curr_sum+=d ))
 done
-# Last part
 PART_DURS+=("$curr_sum")
 START_IDX+=("$start_idx")
-END_IDX+=("$((num_files-1))")
+END_IDX+=("$(( ${#FILES[@]} - 1 ))")
 
-# --- Show estimated parts & ranges ---
 echo "Estimated parts: $total_parts"
 for idx in "${!PART_DURS[@]}"; do
   echo "  Part $((idx+1)) ($(_hms "${PART_DURS[idx]}")): files ${START_IDX[idx]}–${END_IDX[idx]}"
 done
 (( DRY_RUN )) && exit 0
 
-# --- Detect Sample Rates & Bitrates ---
+# --- Detect sample rates & bitrates ---
 declare -A SR_SET BR_SET
 for f in "${FILES[@]}"; do
   sr=$(ffprobe -v error -select_streams a:0 \
        -show_entries stream=sample_rate \
        -of default=noprint_wrappers=1:nokey=1 "$f")
   SR_SET[$sr]=1
-  raw=$(ffprobe -v error -show_entries format=bit_rate \
-        -of default=noprint_wrappers=1:nokey=1 "$f")
-  BR_SET[$((raw/1000))]=1
+  br=$(ffprobe -v error -show_entries format=bit_rate \
+       -of default=noprint_wrappers=1:nokey=1 "$f")
+  BR_SET[$((br/1000))]=1
 done
 mapfile -t SR_LIST < <(printf "%s\n" "${!SR_SET[@]}" | sort -n)
 mapfile -t BR_LIST < <(printf "%s\n" "${!BR_SET[@]}" | sort -n)
-
 echo "Detected sample rates: ${SR_LIST[*]}"
 echo "Detected bitrates: ${BR_LIST[*]} kbps"
 
-# --- Choose Output Format ---
+# --- Choose output format ---
 TARGET_SR=(48000 48000 44100 44100)
 TARGET_BR=(128k    64k    128k    64k)
 echo "Choose output format (no up-scaling beyond inputs):"
@@ -140,7 +130,7 @@ OUT_BR=${TARGET_BR[CHOICE-1]}
 echo "Selected: $OUT_SR Hz @ $OUT_BR"
 BR_KBPS=${OUT_BR%k}
 
-# --- Encode & Package Each Part ---
+# --- Encode & package each part ---
 for ((p=0; p<total_parts; p++)); do
   s=${START_IDX[p]} e=${END_IDX[p]} pd=${PART_DURS[p]}
   echo "-- Creating Part $((p+1)) ($(_hms "$pd")) --" >&2
@@ -148,47 +138,41 @@ for ((p=0; p<total_parts; p++)); do
     echo "  ${FILES[i]#$SRC_DIR/}" >&2
   done
 
-  if (( total_parts > 1 )); then
-    part_name="$AUTHOR — $TITLE — Part $((p+1))"
-  else
-    part_name="$AUTHOR — $TITLE"
-  fi
+  part_name="$TITLE"
+  (( total_parts>1 )) && part_name="$TITLE — Part $((p+1))"
 
-  # Build concat list & chap file
+  # Build concat list & chapter file
   listfile=$(mktemp)
   chapfile=$(mktemp)
-  offset=0
-  idx=1
+  offset=0 idx=1
   for ((i=s; i<=e; i++)); do
-    f="${FILES[i]}" d="${DURS[i]}"
+    f=${FILES[i]} d=${DURS[i]}
     echo "file '$f'" >> "$listfile"
     hh=$((offset/3600)) mm=$(((offset%3600)/60)) ss=$((offset%60))
     ts=$(printf '%02d:%02d:%02d.000' $hh $mm $ss)
-    chap_title=$(ffprobe -v error -show_entries format_tags=title \
-      -of default=noprint_wrappers=1:nokey=1 "$f")
-    [[ -z "$chap_title" ]] && chap_title=$(basename "$f")
+    title_tag=$(ffprobe -v error -show_entries format_tags=title \
+               -of default=noprint_wrappers=1:nokey=1 "$f")
+    [[ -z $title_tag ]] && title_tag=$(basename "$f")
     printf 'CHAPTER%02d=%s\nCHAPTER%02dNAME=%s\n' \
-      $idx "$ts" $idx "$chap_title" >> "$chapfile"
-    (( offset += d, idx++ ))
+      $idx "$ts" $idx "$title_tag" >> "$chapfile"
+    (( offset+=d, idx++ ))
   done
 
-  tmpfile=$(mktemp "${TMPDIR:-/tmp}/ab_part.XXXXXX")
-  part_aac="${tmpfile}.aac"
+  tmp=$(mktemp "${TMPDIR:-/tmp}/ab_part.XXXXXX")
+  part_aac="${tmp}.aac"
   exp_bytes=$(( pd * BR_KBPS * 1000 / 8 ))
 
-  # **Faster encode**: use all cores + libfdk_aac in VBR mode
-  ffmpeg -hide_banner -loglevel error \
+  set +o pipefail
+  ffmpeg -hide_banner -nostats -loglevel fatal \
     -threads 0 \
     -f concat -safe 0 -i "$listfile" \
     -c:a libfdk_aac -vbr 3 -ar "$OUT_SR" -vn -f adts - \
-  | pv -pter -s "$exp_bytes" > "$part_aac"
+  | pv -pter -s "$exp_bytes" >"$part_aac"
+  set -o pipefail
 
-  out="$OUT_DIR/${part_name}.m4b"
+  out="$OUT_DIR/${AUTHOR} — ${part_name}.m4b"
   MP4Box -add "$part_aac" \
-    -itags title="$part_name" \
-    -itags artist="$AUTHOR" \
-    -itags album="$TITLE" \
-    -itags album_artist="$AUTHOR" \
+    -itags "title=$TITLE:album=$TITLE:artist=$AUTHOR:album_artist=$AUTHOR" \
     -chap "$chapfile" \
     -new "$out" >/dev/null
 
