@@ -3,7 +3,7 @@
 #         showing real-time encode progress via pv and packaging via MP4Box
 # Supports --dry-run mode and validation of input files
 # Usage: ab.sh [--dry-run] <source_dir>
-# Requirements: bash, ffprobe, ffmpeg, pv, MP4Box
+# Requirements: bash, ffprobe, ffmpeg (with libfdk_aac), pv, MP4Box
 
 set -euo pipefail
 
@@ -143,28 +143,24 @@ BR_KBPS=${OUT_BR%k}
 # --- Encode & Package Each Part ---
 for ((p=0; p<total_parts; p++)); do
   s=${START_IDX[p]} e=${END_IDX[p]} pd=${PART_DURS[p]}
-  # Show part creation header
   echo "-- Creating Part $((p+1)) ($(_hms "$pd")) --" >&2
-  # List files for this part
   for ((i=s; i<=e; i++)); do
     echo "  ${FILES[i]#$SRC_DIR/}" >&2
   done
 
-  # Determine part name
   if (( total_parts > 1 )); then
     part_name="$AUTHOR — $TITLE — Part $((p+1))"
   else
     part_name="$AUTHOR — $TITLE"
   fi
 
-  # Build concat list & GPAC chapter file
+  # Build concat list & chap file
   listfile=$(mktemp)
   chapfile=$(mktemp)
   offset=0
   idx=1
   for ((i=s; i<=e; i++)); do
-    f="${FILES[i]}"
-    d="${DURS[i]}"
+    f="${FILES[i]}" d="${DURS[i]}"
     echo "file '$f'" >> "$listfile"
     hh=$((offset/3600)) mm=$(((offset%3600)/60)) ss=$((offset%60))
     ts=$(printf '%02d:%02d:%02d.000' $hh $mm $ss)
@@ -176,20 +172,17 @@ for ((p=0; p<total_parts; p++)); do
     (( offset += d, idx++ ))
   done
 
-  # Portable mktemp + .aac suffix
   tmpfile=$(mktemp "${TMPDIR:-/tmp}/ab_part.XXXXXX")
   part_aac="${tmpfile}.aac"
-
-  # Estimate expected output size (bytes)
   exp_bytes=$(( pd * BR_KBPS * 1000 / 8 ))
 
-  # Phase 1: raw AAC → pv → .aac
+  # **Faster encode**: use all cores + libfdk_aac in VBR mode
   ffmpeg -hide_banner -loglevel error \
+    -threads 0 \
     -f concat -safe 0 -i "$listfile" \
-    -c:a aac -b:a "$OUT_BR" -ar "$OUT_SR" -vn -f adts - \
+    -c:a libfdk_aac -vbr 3 -ar "$OUT_SR" -vn -f adts - \
   | pv -pter -s "$exp_bytes" > "$part_aac"
 
-  # Phase 2: wrap into .m4b with MP4Box
   out="$OUT_DIR/${part_name}.m4b"
   MP4Box -add "$part_aac" \
     -itags title="$part_name" \
