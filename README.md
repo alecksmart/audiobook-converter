@@ -1,95 +1,75 @@
 # ab.sh
 
-A Bash script to concatenate audio files into `.m4b` audiobooks with chapters, automatically splitting into parts no longer than 12 hours.
-
-This README covers the new `--dry-run` mode and validation pass added in recent updates.
+A simple Bash script to concatenate audio files into `.m4b` audiobooks with chapters, automatically splitting parts at a maximum duration (12 hours by default), and displaying real-time encoding progress using `pv`.
 
 ## Features
 
-- Scans a directory for audio files (`mp3`, `wav`, `flac`)
-- Validates each file can be read by `ffprobe`
-- Calculates the duration of each file with `ffprobe`
-- Splits into parts so that no part exceeds 12 hours
-- Generates chapter metadata from existing tags (or filenames)
-- Encodes output as `.m4b` (AAC) with selectable sample rate and bitrate
-- Prompts interactively for author/artist and title metadata
-- **Dry-run mode** to preview all actions without creating or modifying files
+- Scans a source directory for MP3, WAV, and FLAC audio files
+- Validates input files and computes durations via `ffprobe`
+- Splits into multiple parts if total duration exceeds 12 hours
+- Prompts for Author/Artist and Title metadata
+- Encodes raw AAC with live progress bar (via `pv`)
+- Packages into `.m4b` with chapters using `MP4Box` (GPAC)
+- Supports `--dry-run` mode to preview actions
 
 ## Requirements
 
-- [bash](https://www.gnu.org/software/bash/)
-- [ffmpeg](https://ffmpeg.org/) (includes `ffprobe`)
-- [ffprobe](https://ffmpeg.org/ffprobe.html)
+- **bash**
+- **ffprobe** (from FFmpeg)
+- **ffmpeg**
+- **pv** (Pipe Viewer)
+- **MP4Box** (part of GPAC)
 
-## Installation
+### Install Dependencies
 
+#### macOS (Homebrew)
 ```bash
-git clone https://github.com/<username>/<repository>.git
-cd <repository>
-chmod +x ab.sh
+brew update
+brew install ffmpeg pv gpac
+```
+
+#### Debian / Ubuntu
+```bash
+sudo apt update
+sudo apt install ffmpeg pv gpac
+```
+
+#### Fedora
+```bash
+sudo dnf install ffmpeg pv gpac
+```
+
+#### Arch Linux
+```bash
+sudo pacman -S ffmpeg pv gpac
+```
+
+#### Windows (using Chocolatey)
+```powershell
+choco install ffmpeg pv gpac
 ```
 
 ## Usage
 
 ```bash
-./ab.sh [--dry-run|-n] <source_dir>
+./ab.sh [--dry-run] <source_dir>
 ```
 
-- `--dry-run`, `-n`: Preview actions (creating output directory, validating files, estimating splits) without writing any files
-- `<source_dir>`: Directory containing your audio files
+- `--dry-run`, `-n`  Show the steps without creating any files
+- `<source_dir>`    Directory containing audio files to process
 
-### Dry-run Example
+### Example
 
-```text
-$ ./ab.sh --dry-run ~/audiobooks/source
-Author/Artist name [default: source]: J. Doe
-Title [default: source]: My Audiobook
-[DRY-RUN] Would create output directory: ~/audiobooks/source/output
-Found 10 files.
-Validating input files with ffprobe...
-[DRY-RUN] Validated: track01.mp3 (duration: 0 h: 5 m: 12 s)
-... (other validations)
-Estimated parts: 1
-  Part 1 (0 h: 52 m: 30 s): files 0-9
-[DRY-RUN] Completed. No files were created.
+```bash
+./ab.sh "MyAudioCollection"
 ```
 
-### Normal Run Example
+You will be prompted to enter the Author/Artist name and Title (defaults derived from the directory name if left blank).
 
-```text
-$ ./ab.sh ~/audiobooks/source
-Author/Artist name [default: source]: J. Doe
-Title [default: source]: My Audiobook
-Found 10 files.
-Estimated parts: 1
-Per-part durations:
-  Part 1: 0 h: 52 m: 30 s
-Detected sample rates: 44100
-Detected bitrates: 128 kbps
-Choose output format (no upscaling beyond inputs):
-  1) 48000 Hz @ 128k
-  2) 48000 Hz @ 64k
-  3) 44100 Hz @ 128k
-  4) 44100 Hz @ 64k
-Enter choice [1-4]: 3
-Selected: 44100 Hz @ 128k
--- Creating Part 1 (0 h: 52 m: 30 s) --
-  track01.mp3
-  ...
-Creating: ~/audiobooks/source/output/J. Doe — My Audiobook.m4b
-Done. Outputs in ~/audiobooks/source/output
-```
-
-## Configuration
-
-- **MAX_DURATION**: Maximum part length in seconds (default is 12 hours). Edit the `MAX_DURATION` variable at the top of `ab.sh` to change this.
-
-## Contributing
-
-Pull requests and issues are welcome! Please open an issue first to discuss major changes.
+Outputs are placed in `output/` subdirectory under your source directory.
 
 ## License
 
-This project is released under the [MIT License](LICENSE).
+MIT © alecksmart
 
 
