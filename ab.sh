@@ -1,15 +1,24 @@
 #!/usr/bin/env bash
-# create_audiobook.sh - Concatenate audio files into .m4b with chapters, splitting at 12h max
-# Usage: create_audiobook.sh <source_dir>
+# ab.sh - Concatenate audio files into .m4b with chapters, splitting at 12h max
+# Supports --dry-run mode and validation of input files
+# Usage: ab.sh [--dry-run] <source_dir>
 # Requirements: bash, ffprobe, ffmpeg
 
 set -euo pipefail
 
 MAX_DURATION=$((12 * 3600))  # 12 hours max per part
+DRY_RUN=0
+
+# --- Parse Options ---
+if [[ ${1:-} == "--dry-run" || ${1:-} == "-n" ]]; then
+  DRY_RUN=1
+  shift
+fi
 
 _usage() {
   cat <<EOF
-Usage: $(basename "$0") <source_dir>
+Usage: $(basename "$0") [--dry-run] <source_dir>
+  --dry-run, -n   Show actions without creating files
   <source_dir>: directory containing audio files (mp3, wav, flac)
 EOF
   exit 1
@@ -28,7 +37,11 @@ read -rp "Title [default: $BASE]: " TITLE
 TITLE=${TITLE:-$BASE}
 
 OUT_DIR="$SRC_DIR/output"
-mkdir -p "$OUT_DIR"
+if (( DRY_RUN == 0 )); then
+  mkdir -p "$OUT_DIR"
+else
+  echo "[DRY-RUN] Would create output directory: $OUT_DIR"
+fi
 
 # --- Dependencies ---
 for cmd in ffprobe ffmpeg; do
@@ -51,12 +64,20 @@ readarray -t FILES < <(
 (( ${#FILES[@]} )) || { echo "Error: no audio files found in '$SRC_DIR'" >&2; exit 3; }
 echo "Found ${#FILES[@]} files."
 
-# --- Pre-calculate Durations (in seconds) ---
+# --- Validation Pass & Duration Collection ---
+echo "Validating input files with ffprobe..."
 declare -a DURS
 for f in "${FILES[@]}"; do
+  if ! ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$f" >/dev/null; then
+    echo "Error: ffprobe cannot read '$f'" >&2
+    exit 5
+  fi
   dur=$(ffprobe -v error -show_entries format=duration \
-    -of default=noprint_wrappers=1:nokey=1 "$f" | cut -d'.' -f1)
+         -of default=noprint_wrappers=1:nokey=1 "$f" | cut -d'.' -f1)
   DURS+=("$dur")
+  if (( DRY_RUN == 1 )); then
+    echo "[DRY-RUN] Validated: $f (duration: $(_hms "$dur"))"
+  fi
 done
 
 # --- Estimate Parts & Record Ranges ---
@@ -81,10 +102,18 @@ START_IDX+=("$start_idx")
 END_IDX+=("$((num_files-1))")
 
 echo "Estimated parts: $total_parts"
-echo "Per-part durations:"
 for idx in "${!PART_DURS[@]}"; do
-  echo "  Part $((idx+1)): $(_hms "${PART_DURS[idx]}")"
+  dur=${PART_DURS[idx]}
+  start=${START_IDX[idx]}
+  end=${END_IDX[idx]}
+  echo "  Part $((idx+1)) ($(_hms "$dur")): files $start-$end"
 done
+
+# If dry-run, stop here
+if (( DRY_RUN == 1 )); then
+  echo "[DRY-RUN] Completed. No files were created."
+  exit 0
+fi
 
 # --- Detect Sample Rates & Bitrates ---
 declare -A SR_SET BR_SET
@@ -126,9 +155,12 @@ for ((p=0; p<total_parts; p++)); do
   part_hms=$(_hms "${part_sum}")
   echo "-- Creating Part $((p+1)) (${part_hms}) --" >&2
 
-  part_name="$AUTHOR — $TITLE — Part $((p+1))"
+  if (( total_parts > 1 )); then
+    part_name="$AUTHOR — $TITLE — Part $((p+1))"
+  else
+    part_name="$AUTHOR — $TITLE"
+  fi
 
-  # list files
   for ((i=s; i<=e; i++)); do
     echo "  ${FILES[i]#$SRC_DIR/}" >&2
   done
