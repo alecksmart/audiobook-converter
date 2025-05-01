@@ -1,52 +1,52 @@
+```
 # ab.sh
 
 A simple Bash script to concatenate audio files into `.m4b` audiobooks with chapters, automatically splitting parts at a maximum duration (12 hours by default), and displaying real-time encoding progress using `pv`.
 
 ## Features
 
-- Scans a source directory for MP3, WAV, and FLAC audio files
+- Scans a source directory for MP3, WAV, FLAC, and M4A audio files
 - Validates input files and computes durations via `ffprobe`
 - Splits into multiple parts if total duration exceeds 12 hours
 - Prompts for Author/Artist and Title metadata
 - Encodes raw AAC with live progress bar (via `pv`)
-- Packages into `.m4b` with chapters using `MP4Box` (GPAC)
+- Packages into `.m4b` with chapters using `ffmpeg` metadata
 - Supports `--dry-run` mode to preview actions
 
 ## Requirements
 
 - **bash**
 - **ffprobe** (from FFmpeg)
-- **ffmpeg**
+- **ffmpeg** (with `libfdk_aac` for highest quality)
 - **pv** (Pipe Viewer)
-- **MP4Box** (part of GPAC)
 
 ### Install Dependencies
 
 #### macOS (Homebrew)
 ```bash
 brew update
-brew install ffmpeg pv gpac
+brew install ffmpeg pv
 ```
 
 #### Debian / Ubuntu
 ```bash
 sudo apt update
-sudo apt install ffmpeg pv gpac
+sudo apt install ffmpeg pv
 ```
 
 #### Fedora
 ```bash
-sudo dnf install ffmpeg pv gpac
+sudo dnf install ffmpeg pv
 ```
 
 #### Arch Linux
 ```bash
-sudo pacman -S ffmpeg pv gpac
+sudo pacman -S ffmpeg pv
 ```
 
 #### Windows (using Chocolatey)
 ```powershell
-choco install ffmpeg pv gpac
+choco install ffmpeg pv
 ```
 
 ## Usage
@@ -66,10 +66,11 @@ choco install ffmpeg pv gpac
 
 You will be prompted to enter the Author/Artist name and Title (defaults derived from the directory name if left blank).
 
-Outputs are placed in `output/` subdirectory under your source directory.
+Outputs are placed in the `output/` subdirectory under your source directory.
 
 ## License
 
 MIT © alecksmart
+```
 
 

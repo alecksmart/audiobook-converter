@@ -19,7 +19,7 @@ _usage() {
   cat <<EOF
 Usage: $(basename "$0") [--dry-run] <source_dir>
   --dry-run, -n   Show actions without creating files
-  <source_dir>: directory containing audio files (mp3, wav, flac)
+  <source_dir>: directory containing audio files (mp3, wav, flac, m4a)
 EOF
   exit 1
 }
@@ -55,7 +55,7 @@ _hms() {
 # --- Gather & sort inputs ---
 readarray -t FILES < <(
   find "$SRC_DIR" -type f ! -path "$OUT_DIR/*" \
-    \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \) \
+    \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' -o -iname '*.m4a' \) \
     | sort -V
 )
 (( ${#FILES[@]} )) || { echo "No audio files found" >&2; exit 3; }
