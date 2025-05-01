@@ -68,3 +68,5 @@ You will be prompted to enter the Author/Artist name and Title (defaults derived
 Outputs are placed in the `output/` subdirectory under your source directory.
 
 ## License
+
+MIT © alecksmart
