@@ -1,4 +1,3 @@
-```
 # ab.sh
 
 A simple Bash script to concatenate audio files into `.m4b` audiobooks with chapters, automatically splitting parts at a maximum duration (12 hours by default), and displaying real-time encoding progress using `pv`.
@@ -61,7 +60,7 @@ choco install ffmpeg pv
 ### Example
 
 ```bash
-./ab.sh "MyAudioCollection"
+./ab.sh "AudioBookDir"
 ```
 
 You will be prompted to enter the Author/Artist name and Title (defaults derived from the directory name if left blank).
@@ -69,8 +68,3 @@ You will be prompted to enter the Author/Artist name and Title (defaults derived
 Outputs are placed in the `output/` subdirectory under your source directory.
 
 ## License
-
-MIT © alecksmart
-```
-
-
