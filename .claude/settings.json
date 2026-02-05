@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/alec/Projects/audiobook-converter/ab.sh:*)"
+    ]
+  }
+}

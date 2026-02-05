@@ -1,0 +1,21 @@
+# Shell/editor artifacts
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment files
+.env
+.env.*
+
+# Temp/cache
+.tmp/
+.cache/
+
+# Tooling
+.shellcheckrc
+.shfmt
+
+ .vscode/
