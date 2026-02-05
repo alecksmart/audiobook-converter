@@ -18,4 +18,6 @@
 .shellcheckrc
 .shfmt
 
- .vscode/
+.vscode/
+
+.claude/
