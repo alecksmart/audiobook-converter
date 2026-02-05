@@ -21,7 +21,7 @@ relink: unlink link
 
 deps:
 	@set -e; \
-	for c in bash ffprobe ffmpeg pv; do \
+	for c in bash ffprobe ffmpeg; do \
 		command -v $$c >/dev/null 2>&1 || { echo "Missing: $$c" >&2; exit 1; }; \
 	done; \
 	echo "All deps present"
